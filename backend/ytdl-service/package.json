@@ -1,0 +1,17 @@
+{
+  "name": "rex-ytdl-core-service",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local @distube/ytdl-core v5 streaming sidecar for REX",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "5.2.1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "rex-vercel-backend-functions",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "5.2.1"
+  },
+  "version": "0.1.0"
+}

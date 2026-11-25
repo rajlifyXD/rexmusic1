@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/stream/:video_id",
+      "destination": "/api/ytdl?id=:video_id"
+    }
+  ],
+  "functions": {
+    "api/ytdl.js": {
+      "maxDuration": 300
+    }
+  }
+}
