@@ -63,7 +63,38 @@ async function getInfo(id) {
   return info;
 }
 
+function inspectFormats(info) {
+  const streamingData = info.streaming_data;
+  const adaptive = Array.isArray(streamingData?.adaptive_formats) ? streamingData.adaptive_formats : [];
+  const regular = Array.isArray(streamingData?.formats) ? streamingData.formats : [];
+  const compatible = adaptive.filter((format) =>
+    format.has_audio && !format.has_video && !format.is_type_otf &&
+    !(format.drm_families?.length)
+  );
+  const mimeTypes = [...new Set(
+    [...adaptive, ...regular]
+      .map((format) => String(format.mime_type || "").split(";")[0])
+      .filter((value) => /^(audio|video)\//.test(value))
+  )].slice(0, 12);
+
+  // Counts and MIME types only: never expose stream URLs, signatures,
+  // cookies, authorization data, or raw player response bodies.
+  return {
+    hasStreamingData: Boolean(streamingData),
+    adaptiveFormatCount: adaptive.length,
+    regularFormatCount: regular.length,
+    audioFlagCount: adaptive.filter((format) => format.has_audio).length,
+    videoFlagCount: adaptive.filter((format) => format.has_video).length,
+    audioOnlyBeforeFilters: adaptive.filter((format) => format.has_audio && !format.has_video).length,
+    otfFormatCount: adaptive.filter((format) => format.is_type_otf).length,
+    drmMarkedFormatCount: adaptive.filter((format) => Boolean(format.drm_families?.length)).length,
+    compatibleAudioOnlyCount: compatible.length,
+    mimeTypes,
+  };
+}
+
 function selectAudioFormat(info, profile) {
+  const diagnostics = inspectFormats(info);
   const formats = (info.streaming_data?.adaptive_formats || []).filter((format) =>
     format.has_audio && !format.has_video && !format.is_type_otf &&
     !(format.drm_families?.length)
@@ -71,6 +102,7 @@ function selectAudioFormat(info, profile) {
   if (!formats.length) {
     const error = new Error("YouTube returned no compatible audio-only formats.");
     error.statusCode = 502;
+    error.diagnostics = diagnostics;
     throw error;
   }
 
