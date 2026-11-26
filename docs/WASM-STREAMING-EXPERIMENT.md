@@ -23,6 +23,7 @@ Set these variables on the **frontend Vercel project**, in Preview only while te
 
 | Variable | Value |
 | --- | --- |
+| `VITE_API_BASE_URL` | The matching REX backend Preview origin (this branch uses the backend branch alias) |
 | `VITE_REX_STREAM_ENGINE` | `wasm` |
 | `VITE_YTDLP_WASM_CORS_PROXY` | Your own yt-dlp-wasm CORS proxy URL |
 | `VITE_YTDLP_WASM_CORS_PROXY_KEY` | The proxy's access key (optional if your proxy does not require one) |
