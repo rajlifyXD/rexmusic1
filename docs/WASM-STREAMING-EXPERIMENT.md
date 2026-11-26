@@ -8,12 +8,12 @@ When `VITE_REX_STREAM_ENGINE=wasm` is set, REX uses this path:
 
 `REX HTMLAudioElement → direct signed audio-only Google Video URL`
 
-1. The browser starts `@project516/yt-dlp-wasm` 0.6.0 in its own Pyodide module worker.
-2. The worker extracts only YouTube metadata and progressive audio format URLs. It does not download the song into a Blob or hold the audio file in browser memory.
+1. REX imports the pinned `@project516/yt-dlp-wasm` 0.6.0 npm dependency. Vite bundles its module worker as a same-origin asset (the worker must not be loaded directly from a cross-origin CDN).
+2. The worker loads the pinned yt-dlp 2026.10.26 Python wheel from jsDelivr (CORS-enabled), then extracts only YouTube metadata and progressive audio format URLs. It does not download the song into a Blob or hold the audio file in browser memory.
 3. The REX player assigns the selected signed audio URL to its existing `HTMLAudioElement`.
 4. REX retains its current queue, play/pause, previous/next, shuffle, repeat, seek, quality selection, Media Session and lyrics clock.
 
-The extractor tries the current `mweb` client first and then the `web` client. The backend's `/api/potoken` function is adapted from Yozora's PO-token-provider approach. It returns only short-lived PO-token material; it never returns or forwards REX account cookies.
+The extractor tries the current `mweb` client first and then the `web` client. For each client it requests separate GVS and player Proof-of-Origin tokens. The backend's `/api/potoken` function is adapted from Yozora's PO-token-provider approach. It returns only short-lived PO-token material; it never returns or forwards REX account cookies.
 
 ## Required configuration
 
@@ -44,6 +44,10 @@ The backend preview also needs the existing Supabase and database variables requ
 Use the proxy implementation documented by [Project516/yt-dlp-wasm](https://github.com/Project516/yt-dlp-wasm/tree/master/packages/cors-proxy). Its hosted Cloudflare Worker mode is useful for general testing, but the project warns that YouTube often rejects Cloudflare Worker datacenter IPs. For YouTube, the maintainers recommend running the proxy on an always-on home Linux machine and publishing it through a Cloudflare Tunnel. A Vercel Serverless Function is also a datacenter egress point and is not a reliable substitute for a residential proxy.
 
 The proxy can see every request it relays. Do not submit cookies, passwords, or other personal credentials through it. This REX integration intentionally does not use cookies.
+
+## Dependency and licensing note
+
+`@project516/yt-dlp-wasm` is distributed under `AGPL-3.0-or-later AND Unlicense`; its ffmpeg WASM core is `AGPL-3.0-or-later`. Review those terms against REX's distribution model before shipping the dependency to the public production app.
 
 ## Browser requirements
 
