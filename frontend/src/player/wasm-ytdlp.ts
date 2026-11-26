@@ -9,10 +9,7 @@
  * cookies or Supabase credentials to this engine or its proxy.
  */
 import { apiUrl } from '../api';
-
-const YTDLP_WASM_VERSION = '0.6.0';
-const YTDLP_WASM_MODULE_URL =
-  `https://cdn.jsdelivr.net/npm/@project516/yt-dlp-wasm@${YTDLP_WASM_VERSION}/src/browser.mjs`;
+import { createYtDlp } from '@project516/yt-dlp-wasm';
 
 type Quality = 'data-saver' | 'balanced' | 'high';
 
@@ -44,13 +41,7 @@ type YtdlpInstance = {
   terminate(): void;
 };
 
-type YtdlpModule = {
-  createYtDlp(options?: {
-    corsProxy?: string;
-    corsProxyKey?: string;
-    onLog?: (line: string, stream: 'stdout' | 'stderr') => void;
-  }): Promise<YtdlpInstance>;
-};
+
 
 export type WasmAudioStream = {
   url: string;
@@ -130,18 +121,19 @@ async function getEngine(): Promise<YtdlpInstance> {
   }
   if (!enginePromise) {
     enginePromise = (async () => {
-      // The library owns its Pyodide worker and its wheel/wasm asset loading.
-      // Keep this as an external module import so Vite does not try to bundle
-      // Pyodide's worker and its large WASM assets into the REX app bundle.
-      const module = await import(/* @vite-ignore */ YTDLP_WASM_MODULE_URL) as YtdlpModule;
-      return module.createYtDlp({
+      // A package import lets Vite rewrite the module worker to a same-origin
+      // asset. A raw CDN import would create a cross-origin Worker, which browsers block.
+      return await createYtDlp({
         corsProxy,
+        // Vite does not copy node_modules package dist/ files automatically.
+        // Load the wheel from the pinned upstream package release.
+        wheelURL: 'https://cdn.jsdelivr.net/npm/@project516/yt-dlp-wasm@0.6.0/dist/yt_dlp-2026.10.26-py3-none-any.whl',
         ...(corsProxyKey ? { corsProxyKey } : {}),
         onLog: () => {
           // Do not forward yt-dlp logs to the console: diagnostics may contain
           // signed media URLs and short-lived PO tokens.
         },
-      });
+      }) as unknown as YtdlpInstance;
     })().catch((error) => {
       enginePromise = null;
       throw error;
