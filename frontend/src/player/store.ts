@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { api, apiUrl } from '../api';
+import { isWasmStreamEngineSelected, resolveWasmAudioStream } from './wasm-ytdlp';
 import type { Track } from '../types';
 import { safeGetItem, safeSetItem } from '../lib/storage';
 
@@ -121,7 +122,14 @@ async function openTrackStream(t: Track, token: number, position = 0, resume = t
   audio.removeAttribute('src');
   audio.load();
 
-  const streamUrl = api.streamUrl(t.videoId, quality);
+  let streamUrl: string;
+  if (isWasmStreamEngineSelected()) {
+    const resolved = await resolveWasmAudioStream(t.videoId, quality);
+    if (token !== loadToken) return;
+    streamUrl = resolved.url;
+  } else {
+    streamUrl = api.streamUrl(t.videoId, quality);
+  }
   audio.src = streamUrl;
   audio.load();
 
@@ -166,7 +174,7 @@ async function openTrackStream(t: Track, token: number, position = 0, resume = t
   } catch (streamError) {
     if (token !== loadToken) return;
     const detail = streamError instanceof Error ? streamError.message : String(streamError);
-    set({ ready: false, playing: false, error: `ytdl-core stream: ${detail}` });
+    set({ ready: false, playing: false, error: `${isWasmStreamEngineSelected() ? 'yt-dlp-wasm' : 'ytdl-core'} stream: ${detail}` });
   }
 }
 
