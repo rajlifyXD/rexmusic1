@@ -65,6 +65,34 @@ function selectAudioFormat(info, profile) {
   return sorted[sorted.length - 1];
 }
 
+// Keep diagnostics useful without ever logging request URLs, cookies, tokens,
+// signed media URLs, or arbitrary enumerable properties from library errors.
+function safeErrorMessage(value) {
+  return String(value || "")
+    .replace(/https?:\/\/[^\s"'<>]+/gi, "[url redacted]")
+    .replace(/(cookie|authorization|token|signature|sig|n)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .slice(0, 1000);
+}
+
+function safeErrorDetails(error) {
+  if (!error || typeof error !== "object") {
+    return { message: safeErrorMessage(error) };
+  }
+  const details = {
+    name: safeErrorMessage(error.name || "Error"),
+    message: safeErrorMessage(error.message || ""),
+  };
+  if (typeof error.code === "string" || typeof error.code === "number") {
+    details.code = String(error.code).slice(0, 100);
+  }
+  for (const key of ["status", "statusCode", "errno"]) {
+    if (typeof error[key] === "number" || typeof error[key] === "string") {
+      details[key] = String(error[key]).slice(0, 40);
+    }
+  }
+  return details;
+}
+
 export default {
   async fetch(request) {
     if (request.method === "OPTIONS") {
@@ -134,24 +162,25 @@ export default {
       request.signal.addEventListener("abort", () => stream.destroy(), { once: true });
       return new Response(body, { status, headers });
     } catch (error) {
-      // Preserve the solver's attempt ladder so Vercel logs expose the failing
-      // player/client step rather than only PLAYER_SOLVE_FAILED.
       const attempts = Array.isArray(error?.attempts)
         ? error.attempts.map((attempt) => ({
             client: String(attempt?.client || ""),
             signedIn: Boolean(attempt?.signedIn),
             step: String(attempt?.step || ""),
             code: String(attempt?.code || ""),
-            reason: String(attempt?.reason || "").slice(0, 1200),
-            cause: String(attempt?.cause?.message || attempt?.cause || "").slice(0, 1200),
+            reason: safeErrorMessage(attempt?.reason || ""),
+            cause: safeErrorMessage(attempt?.cause?.message || attempt?.cause || ""),
+            causeDetails: safeErrorDetails(attempt?.cause),
           }))
         : [];
 
       const diagnostic = {
         code: error?.code || "YTDL_REQUEST_FAILED",
-        message: error?.message || "ytdl-core request failed",
+        name: safeErrorMessage(error?.name || "Error"),
+        message: safeErrorMessage(error?.message || "ytdl-core request failed"),
         attempts,
-        cause: String(error?.cause?.message || error?.cause || "").slice(0, 1600),
+        cause: safeErrorMessage(error?.cause?.message || error?.cause || ""),
+        causeDetails: safeErrorDetails(error?.cause),
       };
       console.error("[REX YTDL] stream preparation failed", JSON.stringify(diagnostic));
 
