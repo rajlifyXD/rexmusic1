@@ -139,6 +139,7 @@ export default {
       const attempts = Array.isArray(error?.attempts)
         ? error.attempts.map((attempt) => ({
             client: String(attempt?.client || ""),
+            signedIn: Boolean(attempt?.signedIn),
             step: String(attempt?.step || ""),
             code: String(attempt?.code || ""),
             reason: String(attempt?.reason || "").slice(0, 1200),
