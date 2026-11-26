@@ -4,6 +4,7 @@ const APP_SHELL = [
   "/manifest.webmanifest?v=2",
   "/icons/rex-icon-192.png?v=2",
   "/icons/rex-icon-512.png?v=2",
+  "/icons/rex-icon-maskable-512.png?v=2",
   "/apple-touch-icon.png?v=2",
   "/apple-touch-icon-167.png?v=2",
   "/apple-touch-icon-152.png?v=2",
