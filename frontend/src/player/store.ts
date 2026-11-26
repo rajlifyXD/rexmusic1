@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { api, apiUrl } from '../api';
-import { isWasmStreamEngineSelected, resolveWasmAudioStream } from './wasm-ytdlp';
+import { clearWasmStreamCache, isWasmStreamEngineSelected, resolveWasmAudioStream } from './wasm-ytdlp';
 import type { Track } from '../types';
 import { safeGetItem, safeSetItem } from '../lib/storage';
 
@@ -77,6 +77,8 @@ export function initPlayer() {
   audio.addEventListener('pause', () => { set({ playing: false }); updateMediaSession(false); });
   audio.addEventListener('ended', () => { updateMediaSession(false); onEnded(); });
   audio.addEventListener('error', () => {
+    const failedVideoId = currentTrack()?.videoId;
+    if (isWasmStreamEngineSelected() && failedVideoId) clearWasmStreamCache(failedVideoId);
     const code = audio?.error?.code;
     const reason = code === 2 ? 'Network error while loading audio.' : code === 3 ? 'The browser could not decode this audio format.' : code === 4 ? 'No playable audio stream was returned.' : 'Audio playback failed. Try another track or refresh the stream.';
     set({ playing: false, error: reason });
@@ -122,18 +124,18 @@ async function openTrackStream(t: Track, token: number, position = 0, resume = t
   audio.removeAttribute('src');
   audio.load();
 
-  let streamUrl: string;
-  if (isWasmStreamEngineSelected()) {
-    const resolved = await resolveWasmAudioStream(t.videoId, quality);
-    if (token !== loadToken) return;
-    streamUrl = resolved.url;
-  } else {
-    streamUrl = api.streamUrl(t.videoId, quality);
-  }
-  audio.src = streamUrl;
-  audio.load();
-
   try {
+    let streamUrl: string;
+    if (isWasmStreamEngineSelected()) {
+      const resolved = await resolveWasmAudioStream(t.videoId, quality);
+      if (token !== loadToken) return;
+      streamUrl = resolved.url;
+    } else {
+      streamUrl = api.streamUrl(t.videoId, quality);
+    }
+    audio.src = streamUrl;
+    audio.load();
+
     // Start new tracks immediately. Only resumed positions wait for metadata.
     if (position > 0) {
       await waitForMetadata(audio, token);
