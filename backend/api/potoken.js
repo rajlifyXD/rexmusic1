@@ -49,7 +49,9 @@ async function getToken(videoId, client, context) {
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const provider = (process.env.PO_TOKEN_PROVIDER_URL || "https://poptox.onrender.com").replace(/\/$/, "");
+  const configuredProvider = (process.env.PO_TOKEN_PROVIDER_URL || "").trim();
+  if (!configuredProvider) throw new Error("PO_TOKEN_PROVIDER_URL is not configured");
+  const provider = configuredProvider.replace(/\/$/, "");
   const headers = { "Content-Type": "application/json", "Accept": "application/json" };
   if (process.env.PO_TOKEN_API_KEY) headers["x-api-key"] = process.env.PO_TOKEN_API_KEY;
 
@@ -95,7 +97,7 @@ export default {
     const origin = request.headers.get("origin") || "";
     const allowed = (process.env.REX_CORS_ORIGINS || "")
       .split(",").map((value) => value.trim().replace(/\/$/, "")).filter(Boolean);
-    if (origin && !allowed.includes(origin)) return json(request, 403, { error: "Origin not allowed" });
+    if (!origin || !allowed.includes(origin)) return json(request, 403, { error: "Origin not allowed" });
 
     try {
       return json(request, 200, await getToken(videoId, client, context));
