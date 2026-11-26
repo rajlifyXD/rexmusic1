@@ -1,8 +1,36 @@
 import { Readable } from "node:stream";
 import { Ytdl } from "@distube/ytdl-core";
 
+// YouTube's November 2026 main player variant began throwing
+// "addOnDisposeCallback is not a function" during n-challenge solving.
+// yt-dlp's upstream workaround is to use the TV player JS variant.
+// Keep the rewrite narrowly scoped to the player script; all other
+// requests, cookies, headers, PO tokens and media URLs remain unchanged.
+function ytdlFetch(input, init) {
+  let url;
+  try {
+    url = new URL(input instanceof Request ? input.url : input);
+  } catch {
+    return fetch(input, init);
+  }
+
+  const prefix = "/s/player/";
+  const suffix = "/player_ias.vflset/en_US/base.js";
+  const playerId = url.pathname.startsWith(prefix) && url.pathname.endsWith(suffix)
+    ? url.pathname.slice(prefix.length, -suffix.length)
+    : "";
+  if (url.hostname !== "www.youtube.com" || !/^[a-f0-9]{8}$/i.test(playerId)) {
+    return fetch(input, init);
+  }
+
+  url.pathname = `/s/player/${playerId}/tv-player-ias.vflset/tv-player-ias.js`;
+  const rewrittenInput = input instanceof Request ? new Request(url, input) : url;
+  return fetch(rewrittenInput, init);
+}
+
 const yt = new Ytdl({
   ...(process.env.YT_COOKIE ? { cookie: process.env.YT_COOKIE } : {}),
+  fetch: ytdlFetch,
   lang: "en",
   country: "IN",
   timeoutMs: 35_000,
@@ -93,6 +121,20 @@ function safeErrorDetails(error) {
   return details;
 }
 
+// Expose only a short, allow-listed cause chain. Never serialize arbitrary
+// library error properties: nested errors can carry signed URLs or headers.
+function safeCauseChain(error, limit = 5) {
+  const chain = [];
+  const seen = new Set();
+  let current = error;
+  while (current && typeof current === "object" && chain.length < limit && !seen.has(current)) {
+    seen.add(current);
+    chain.push(safeErrorDetails(current));
+    current = current.cause;
+  }
+  return chain;
+}
+
 export default {
   async fetch(request) {
     if (request.method === "OPTIONS") {
@@ -171,6 +213,7 @@ export default {
             reason: safeErrorMessage(attempt?.reason || ""),
             cause: safeErrorMessage(attempt?.cause?.message || attempt?.cause || ""),
             causeDetails: safeErrorDetails(attempt?.cause),
+            causeChain: safeCauseChain(attempt?.cause),
           }))
         : [];
 
@@ -181,6 +224,7 @@ export default {
         attempts,
         cause: safeErrorMessage(error?.cause?.message || error?.cause || ""),
         causeDetails: safeErrorDetails(error?.cause),
+        causeChain: safeCauseChain(error),
       };
       console.error("[REX YTDL] stream preparation failed", JSON.stringify(diagnostic));
 
