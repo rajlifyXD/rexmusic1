@@ -20,7 +20,13 @@
       "src": "/icons/rex-icon-512.png?v=2",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/rex-icon-maskable-512.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
