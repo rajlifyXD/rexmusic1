@@ -1,8 +1,32 @@
 import { Readable } from "node:stream";
 import { Ytdl } from "@distube/ytdl-core";
 
+// YouTube's November 2026 main player variant began throwing
+// "addOnDisposeCallback is not a function" during n-challenge solving.
+// yt-dlp's upstream workaround is to use the TV player JS variant.
+// Keep the rewrite narrowly scoped to the player script; all other
+// requests, cookies, headers, PO tokens and media URLs remain unchanged.
+function ytdlFetch(input, init) {
+  let url;
+  try {
+    url = new URL(input instanceof Request ? input.url : input);
+  } catch {
+    return fetch(input, init);
+  }
+
+  const match = /^\\/s\\/player\\/([a-f0-9]{8})\\/player_ias\\.vflset\\/en_US\\/base\\.js$/i.exec(url.pathname);
+  if (url.hostname !== "www.youtube.com" || !match) {
+    return fetch(input, init);
+  }
+
+  url.pathname = `/s/player/${match[1]}/tv-player-ias.vflset/tv-player-ias.js`;
+  const rewrittenInput = input instanceof Request ? new Request(url, input) : url;
+  return fetch(rewrittenInput, init);
+}
+
 const yt = new Ytdl({
   ...(process.env.YT_COOKIE ? { cookie: process.env.YT_COOKIE } : {}),
+  fetch: ytdlFetch,
   lang: "en",
   country: "IN",
   timeoutMs: 35_000,
