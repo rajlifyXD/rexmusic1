@@ -147,7 +147,7 @@ export default function PwaInstallPrompt() {
           >
             <button className="rx-pwa-close" type="button" onClick={dismiss} aria-label="Close install guide"><X size={18}/></button>
             <div className="rx-pwa-brand">
-              <img src="/icons/rex-icon-192.svg" alt="" />
+              <img src="/icons/rex-icon-192.png?v=2" alt="" />
               <span><b>REX</b><small>YOUR MUSIC, YOUR SPACE</small></span>
             </div>
             <div className="rx-pwa-intro">

@@ -1,5 +1,18 @@
-const CACHE_NAME = "rex-shell-v1";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/rex-icon-192.svg", "/icons/rex-icon-512.svg", "/apple-touch-icon.png"];
+const CACHE_NAME = "rex-shell-v2";
+const APP_SHELL = [
+  "/",
+  "/manifest.webmanifest?v=2",
+  "/icons/rex-icon-192.png?v=2",
+  "/icons/rex-icon-512.png?v=2",
+  "/icons/rex-icon-maskable-512.png?v=2",
+  "/apple-touch-icon.png?v=2",
+  "/apple-touch-icon-167.png?v=2",
+  "/apple-touch-icon-152.png?v=2",
+  "/apple-touch-icon-120.png?v=2",
+  "/favicon.ico?v=2",
+  "/favicon-32.png?v=2",
+  "/favicon-48.png?v=2"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
