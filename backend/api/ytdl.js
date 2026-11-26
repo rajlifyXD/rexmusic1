@@ -93,6 +93,20 @@ function safeErrorDetails(error) {
   return details;
 }
 
+// Expose only a short, allow-listed cause chain. Never serialize arbitrary
+// library error properties: nested errors can carry signed URLs or headers.
+function safeCauseChain(error, limit = 5) {
+  const chain = [];
+  const seen = new Set();
+  let current = error;
+  while (current && typeof current === "object" && chain.length < limit && !seen.has(current)) {
+    seen.add(current);
+    chain.push(safeErrorDetails(current));
+    current = current.cause;
+  }
+  return chain;
+}
+
 export default {
   async fetch(request) {
     if (request.method === "OPTIONS") {
@@ -171,6 +185,7 @@ export default {
             reason: safeErrorMessage(attempt?.reason || ""),
             cause: safeErrorMessage(attempt?.cause?.message || attempt?.cause || ""),
             causeDetails: safeErrorDetails(attempt?.cause),
+            causeChain: safeCauseChain(attempt?.cause),
           }))
         : [];
 
@@ -181,6 +196,7 @@ export default {
         attempts,
         cause: safeErrorMessage(error?.cause?.message || error?.cause || ""),
         causeDetails: safeErrorDetails(error?.cause),
+        causeChain: safeCauseChain(error),
       };
       console.error("[REX YTDL] stream preparation failed", JSON.stringify(diagnostic));
 
