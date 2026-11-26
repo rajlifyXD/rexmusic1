@@ -1,7 +1,12 @@
 import { Readable } from "node:stream";
 import { Ytdl } from "@distube/ytdl-core";
 
-const yt = new Ytdl({ lang: "en", country: "IN", timeoutMs: 35_000 });
+const yt = new Ytdl({
+  ...(process.env.YT_COOKIE ? { cookie: process.env.YT_COOKIE } : {}),
+  lang: "en",
+  country: "IN",
+  timeoutMs: 35_000,
+});
 const infoCache = new Map();
 const INFO_TTL_MS = 4 * 60 * 1000;
 
