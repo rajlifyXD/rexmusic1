@@ -9,6 +9,9 @@
   "functions": {
     "api/ytdl.js": {
       "maxDuration": 300
+    },
+    "api/potoken.js": {
+      "maxDuration": 30
     }
   }
 }
