@@ -207,18 +207,6 @@ function signedUrlExpiry(value: string): number {
   return Date.now() + 90_000;
 }
 
-function tokenOptions(token: TokenReply | null): Record<string, unknown> {
-  const youtube: Record<string, unknown> = { player_client: ['mweb'] };
-  if (token?.po_token) youtube.po_token = [`mweb.gvs+${token.po_token}`];
-  if (token?.visitor_data) youtube.visitor_data = [token.visitor_data];
-  return {
-    noplaylist: true,
-    quiet: true,
-    no_warnings: true,
-    extractor_args: { youtube },
-  };
-}
-
 /**
  * Resolves a progressive, signed audio-only URL. Playback remains in REX's
  * existing audio element; only metadata extraction is performed by WASM.
@@ -240,9 +228,9 @@ export async function resolveWasmAudioStream(
   const attempts: Array<{ client: 'mweb' | 'web'; token: TokenReply | null }> = [
     { client: 'mweb', token: mwebToken },
   ];
-  if (!mwebToken) attempts.push({ client: 'web', token: await getPoToken(videoId, 'web') });
 
-  for (const attempt of attempts) {
+  for (let index = 0; index < attempts.length; index += 1) {
+    const attempt = attempts[index];
     const youtube: Record<string, unknown> = { player_client: [attempt.client] };
     if (attempt.token?.po_token) {
       youtube.po_token = [`${attempt.client}.gvs+${attempt.token.po_token}`];
@@ -256,9 +244,15 @@ export async function resolveWasmAudioStream(
         extractor_args: { youtube },
       });
       if (info.formats?.some(isProgressiveAudio)) break;
+      lastError = new Error('No progressive audio-only formats were returned.');
     } catch (error) {
       lastError = error;
     }
+
+    // The current recommended mweb client is attempted first. If it cannot
+    // return a direct audio URL, retry once with Yozora's older web-client
+    // token flow rather than getting stuck on a single client family.
+    if (index === 0) attempts.push({ client: 'web', token: await getPoToken(videoId, 'web') });
   }
 
   if (!info) {
