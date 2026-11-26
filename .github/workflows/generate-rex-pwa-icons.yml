@@ -30,6 +30,7 @@ jobs:
           python -m pip install --disable-pip-version-check Pillow
           python - <<'PY'
           import base64
+          import hashlib
           from io import BytesIO
           from pathlib import Path
           from PIL import Image
@@ -37,21 +38,34 @@ jobs:
           source_file = Path(".github/pwa-icon-source.jpg.b64")
           encoded = "".join(source_file.read_text().split())
           source_bytes = base64.b64decode(encoded, validate=True)
-          image = Image.open(BytesIO(source_bytes)).convert("RGB")
-          if image.width != image.height:
-              raise SystemExit(f"Expected a square REX artwork source, got {image.size}")
+          expected_sha256 = "421f89c76632aa193ad50f688c81fca94271d98dffba9d0b4445350de95bd2dd"
+          actual_sha256 = hashlib.sha256(source_bytes).hexdigest()
+          if actual_sha256 != expected_sha256:
+              raise SystemExit(f"REX icon source checksum mismatch: {actual_sha256}")
+          image = Image.open(BytesIO(source_bytes))
+          image.load()
+          image = image.convert("RGB")
+          if image.size != (512, 512):
+              raise SystemExit(f"Expected 512x512 REX artwork source, got {image.size}")
 
           public = Path("frontend/public")
           icon_dir = public / "icons"
           icon_dir.mkdir(parents=True, exist_ok=True)
 
-          def save_png(size, path):
+          def save_png(size, path, maskable=False):
               resized = image.resize((size, size), Image.Resampling.LANCZOS)
+              if maskable:
+                  inset_size = round(size * 0.80)
+                  artwork = resized.resize((inset_size, inset_size), Image.Resampling.LANCZOS)
+                  canvas = Image.new("RGB", (size, size), (9, 10, 13))
+                  offset = ((size - inset_size) // 2, (size - inset_size) // 2)
+                  canvas.paste(artwork, offset)
+                  resized = canvas
               resized.save(path, format="PNG", optimize=True)
 
           save_png(192, icon_dir / "rex-icon-192.png")
           save_png(512, icon_dir / "rex-icon-512.png")
-          save_png(512, icon_dir / "rex-icon-maskable-512.png")
+          save_png(512, icon_dir / "rex-icon-maskable-512.png", maskable=True)
 
           for size, name in [
               (180, "apple-touch-icon.png"),
@@ -71,6 +85,7 @@ jobs:
           )
 
           source_file.unlink()
+          Path('.github/pwa-icon-source.ready').unlink(missing_ok=True)
           print("Generated REX PWA icons from the supplied artwork.")
           PY
 
