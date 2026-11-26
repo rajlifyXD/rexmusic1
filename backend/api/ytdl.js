@@ -1,14 +1,27 @@
 import { Readable } from "node:stream";
-import { Ytdl } from "@distube/ytdl-core";
+import { Innertube, Platform } from "youtubei.js/web";
 
-const yt = new Ytdl({
-  ...(process.env.YT_COOKIE ? { cookie: process.env.YT_COOKIE } : {}),
-  lang: "en",
-  country: "IN",
-  timeoutMs: 35_000,
-});
+// youtubei.js requires an interpreter for YouTube's player transforms.
+// This executes only the player script returned by YouTube.js itself.
+Platform.shim.eval = async (data) => new Function(data.output)();
+
+let innertubePromise;
 const infoCache = new Map();
 const INFO_TTL_MS = 4 * 60 * 1000;
+
+function getClient() {
+  if (!innertubePromise) {
+    innertubePromise = Innertube.create({
+      lang: "en",
+      location: "IN",
+      enable_session_cache: true,
+    }).catch((error) => {
+      innertubePromise = undefined;
+      throw error;
+    });
+  }
+  return innertubePromise;
+}
 
 function allowedOrigin(request) {
   const origin = request.headers.get("origin") || "";
@@ -43,61 +56,41 @@ function validId(id) {
 async function getInfo(id) {
   const cached = infoCache.get(id);
   if (cached && Date.now() - cached.at < INFO_TTL_MS) return cached.info;
-  const info = await yt.getInfo(id);
+  const client = await getClient();
+  const info = await client.getBasicInfo(id);
   if (infoCache.size > 80) infoCache.delete(infoCache.keys().next().value);
   infoCache.set(id, { at: Date.now(), info });
   return info;
 }
 
 function selectAudioFormat(info, profile) {
-  const formats = (info.formats || []).filter((format) =>
-    format.hasAudio && !format.hasVideo && Boolean(format.url) && !format.isDrm && !format.isOtf
+  const formats = (info.streaming_data?.adaptive_formats || []).filter((format) =>
+    format.has_audio && !format.has_video && !format.is_type_otf &&
+    !(format.drm_families?.length)
   );
   if (!formats.length) {
-    const error = new Error("No downloadable audio-only formats were returned.");
+    const error = new Error("YouTube returned no compatible audio-only formats.");
     error.statusCode = 502;
     throw error;
   }
-  const rate = (format) => Number(format.audioBitrate || format.bitrate || 0);
-  const sorted = [...formats].sort((a, b) => rate(a) - rate(b));
-  if (profile === "data-saver") return sorted.find((format) => rate(format) > 0 && rate(format) <= 96) || sorted[0];
-  if (profile === "balanced") return sorted.find((format) => rate(format) > 0 && rate(format) <= 160) || sorted[Math.floor((sorted.length - 1) / 2)];
+
+  const bitrate = (format) => Number(format.average_bitrate || format.bitrate || 0) / 1000;
+  const sorted = [...formats].sort((a, b) => bitrate(a) - bitrate(b));
+  if (profile === "data-saver") return sorted.find((format) => bitrate(format) > 0 && bitrate(format) <= 96) || sorted[0];
+  if (profile === "balanced") return sorted.find((format) => bitrate(format) > 0 && bitrate(format) <= 160) || sorted[Math.floor((sorted.length - 1) / 2)];
   return sorted[sorted.length - 1];
 }
 
-// Keep diagnostics useful without ever logging request URLs, cookies, tokens,
-// signed media URLs, or arbitrary enumerable properties from library errors.
-function safeErrorMessage(value) {
-  return String(value || "")
+function safeMessage(error) {
+  return String(error?.message || error || "YouTube playback request failed")
     .replace(/https?:\/\/[^\s"'<>]+/gi, "[url redacted]")
-    .replace(/(cookie|authorization|token|signature|sig|n)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
-    .slice(0, 1000);
-}
-
-function safeErrorDetails(error) {
-  if (!error || typeof error !== "object") {
-    return { message: safeErrorMessage(error) };
-  }
-  const details = {
-    name: safeErrorMessage(error.name || "Error"),
-    message: safeErrorMessage(error.message || ""),
-  };
-  if (typeof error.code === "string" || typeof error.code === "number") {
-    details.code = String(error.code).slice(0, 100);
-  }
-  for (const key of ["status", "statusCode", "errno"]) {
-    if (typeof error[key] === "number" || typeof error[key] === "string") {
-      details[key] = String(error[key]).slice(0, 40);
-    }
-  }
-  return details;
+    .replace(/(cookie|authorization|token|signature|sig)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .slice(0, 800);
 }
 
 export default {
   async fetch(request) {
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders(request) });
-    }
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
     if (request.method !== "GET") {
       const response = json(request, 405, { error: "Method not allowed" });
       response.headers.set("Allow", "GET, OPTIONS");
@@ -116,7 +109,7 @@ export default {
     try {
       const info = await getInfo(id);
       const format = selectAudioFormat(info, profile);
-      const size = Number(format.contentLength || 0) || null;
+      const size = Number(format.content_length || 0) || null;
       const rangeHeader = request.headers.get("range");
       let range;
 
@@ -135,9 +128,15 @@ export default {
         }
       }
 
+      const client = await getClient();
+      const webStream = await info.download({
+        itag: format.itag,
+        ...(range ? { range } : {}),
+      });
+      const body = Readable.toWeb(Readable.fromWeb(webStream));
       const headers = corsHeaders(request);
-      headers.set("Content-Type", format.mimeType || "audio/webm");
-      headers.set("X-REX-Playback-Engine", "distube-ytdl-core-v5-vercel");
+      headers.set("Content-Type", format.mime_type || "audio/webm");
+      headers.set("X-REX-Playback-Engine", "youtubei-js-18");
       headers.set("X-REX-YTDL-Format", String(format.itag));
 
       let status = 200;
@@ -153,37 +152,15 @@ export default {
         headers.set("Accept-Ranges", "none");
       }
 
-      const stream = yt.download(info, {
-        format,
-        ...(range ? { range } : {}),
-        highWaterMark: 1024 * 1024,
-      });
-      const body = Readable.toWeb(stream);
-      request.signal.addEventListener("abort", () => stream.destroy(), { once: true });
+      request.signal.addEventListener("abort", () => body.cancel().catch(() => {}), { once: true });
       return new Response(body, { status, headers });
     } catch (error) {
-      const attempts = Array.isArray(error?.attempts)
-        ? error.attempts.map((attempt) => ({
-            client: String(attempt?.client || ""),
-            signedIn: Boolean(attempt?.signedIn),
-            step: String(attempt?.step || ""),
-            code: String(attempt?.code || ""),
-            reason: safeErrorMessage(attempt?.reason || ""),
-            cause: safeErrorMessage(attempt?.cause?.message || attempt?.cause || ""),
-            causeDetails: safeErrorDetails(attempt?.cause),
-          }))
-        : [];
-
       const diagnostic = {
-        code: error?.code || "YTDL_REQUEST_FAILED",
-        name: safeErrorMessage(error?.name || "Error"),
-        message: safeErrorMessage(error?.message || "ytdl-core request failed"),
-        attempts,
-        cause: safeErrorMessage(error?.cause?.message || error?.cause || ""),
-        causeDetails: safeErrorDetails(error?.cause),
+        code: error?.code || "YOUTUBEI_REQUEST_FAILED",
+        name: String(error?.name || "Error").slice(0, 100),
+        message: safeMessage(error),
       };
-      console.error("[REX YTDL] stream preparation failed", JSON.stringify(diagnostic));
-
+      console.error("[REX YOUTUBEI] stream preparation failed", JSON.stringify(diagnostic));
       return json(request, Number(error?.statusCode) || 502, diagnostic);
     }
   },

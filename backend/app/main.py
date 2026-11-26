@@ -87,7 +87,7 @@ async def _start_ytdl_sidecar():
         return
 
     server_file = _YTDL_DIR / "server.mjs"
-    package_file = _YTDL_DIR / "node_modules" / "@distube" / "ytdl-core"
+    package_file = _YTDL_DIR / "node_modules" / "youtubei.js"
     if not server_file.is_file() or not package_file.exists():
         print(
             "[REX YTDL] The active engine is not installed; run the REX setup script. "
@@ -130,7 +130,7 @@ async def _start_ytdl_sidecar():
                 try:
                     response = await client.get(f"{_YTDL_BASE}/health")
                     if response.status_code == 200:
-                        print("[REX YTDL] @distube/ytdl-core v5 sidecar ready.", flush=True)
+                        print("[REX YTDL] youtubei.js sidecar ready.", flush=True)
                         return
                 except httpx.HTTPError:
                     pass
@@ -233,7 +233,7 @@ def health():
         "service": "REX API",
         "database": "ready" if database_ok else "unavailable",
         "streaming": "ready" if sidecar_ok else "unavailable",
-        "engine": "@distube/ytdl-core v5 (Vercel Node Function)" if serverless_streaming else "@distube/ytdl-core v5",
+        "engine": "youtubei.js (Vercel Node Function)" if serverless_streaming else "youtubei.js",
     }
 
 
