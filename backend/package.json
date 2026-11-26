@@ -6,7 +6,7 @@
     "node": ">=22.22.2"
   },
   "dependencies": {
-    "@distube/ytdl-core": "5.2.1"
+    "youtubei.js": "18.3.0"
   },
   "version": "0.1.0"
 }
