@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Local @distube/ytdl-core v5 streaming sidecar for REX",
+  "description": "Local YouTube.js streaming sidecar for REX",
   "engines": {
     "node": ">=22.22.2"
   },
@@ -12,6 +12,6 @@
     "check": "node --check server.mjs"
   },
   "dependencies": {
-    "@distube/ytdl-core": "5.2.1"
+    "youtubei.js": "18.3.0"
   }
 }
