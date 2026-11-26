@@ -85,9 +85,9 @@ function safeError(error: unknown): string {
     .slice(0, 600);
 }
 
-async function getPoToken(videoId: string, client: 'mweb' | 'web'): Promise<TokenReply | null> {
+async function getPoToken(videoId: string, client: 'mweb' | 'web', context: 'gvs' | 'player'): Promise<TokenReply | null> {
   const url = apiUrl(
-    `/api/potoken?video_id=${encodeURIComponent(videoId)}&client=${client}&context=gvs`,
+    `/api/potoken?video_id=${encodeURIComponent(videoId)}&client=${client}&context=${context}`,
   );
   try {
     const response = await fetch(url, {
@@ -213,21 +213,30 @@ export async function resolveWasmAudioStream(
 
   const engine = await getEngine();
   const videoUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
-  const mwebToken = await getPoToken(videoId, 'mweb');
+  const getTokenPair = async (client: 'mweb' | 'web') => {
+    const [gvs, player] = await Promise.all([
+      getPoToken(videoId, client, 'gvs'),
+      getPoToken(videoId, client, 'player'),
+    ]);
+    return { gvs, player };
+  };
+  const mwebTokens = await getTokenPair('mweb');
 
   let info: YtdlpInfo | null = null;
   let lastError: unknown;
-  const attempts: Array<{ client: 'mweb' | 'web'; token: TokenReply | null }> = [
-    { client: 'mweb', token: mwebToken },
+  const attempts: Array<{ client: 'mweb' | 'web'; tokens: Awaited<ReturnType<typeof getTokenPair>> }> = [
+    { client: 'mweb', tokens: mwebTokens },
   ];
 
   for (let index = 0; index < attempts.length; index += 1) {
     const attempt = attempts[index];
     const youtube: Record<string, unknown> = { player_client: [attempt.client] };
-    if (attempt.token?.po_token) {
-      youtube.po_token = [`${attempt.client}.gvs+${attempt.token.po_token}`];
-    }
-    if (attempt.token?.visitor_data) youtube.visitor_data = [attempt.token.visitor_data];
+    const poTokens: string[] = [];
+    if (attempt.tokens.gvs?.po_token) poTokens.push(`${attempt.client}.gvs+${attempt.tokens.gvs.po_token}`);
+    if (attempt.tokens.player?.po_token) poTokens.push(`${attempt.client}.player+${attempt.tokens.player.po_token}`);
+    if (poTokens.length) youtube.po_token = poTokens;
+    const visitorData = attempt.tokens.gvs?.visitor_data || attempt.tokens.player?.visitor_data;
+    if (visitorData) youtube.visitor_data = [visitorData];
     try {
       info = await engine.extractInfo(videoUrl, {
         noplaylist: true,
@@ -241,10 +250,9 @@ export async function resolveWasmAudioStream(
       lastError = error;
     }
 
-    // The current recommended mweb client is attempted first. If it cannot
-    // return a direct audio URL, retry once with Yozora's older web-client
-    // token flow rather than getting stuck on a single client family.
-    if (index === 0) attempts.push({ client: 'web', token: await getPoToken(videoId, 'web') });
+    // The recommended mweb client is attempted first. If it returns no direct
+    // audio URL, retry with Yozora's web-client GVS and player token contexts.
+    if (index === 0) attempts.push({ client: 'web', tokens: await getTokenPair('web') });
   }
 
   if (!info) {
