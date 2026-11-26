@@ -159,6 +159,7 @@ export default {
         code: error?.code || "YOUTUBEI_REQUEST_FAILED",
         name: String(error?.name || "Error").slice(0, 100),
         message: safeMessage(error),
+        ...(error?.diagnostics ? { diagnostics: error.diagnostics } : {}),
       };
       console.error("[REX YOUTUBEI] stream preparation failed", JSON.stringify(diagnostic));
       return json(request, Number(error?.statusCode) || 502, diagnostic);
