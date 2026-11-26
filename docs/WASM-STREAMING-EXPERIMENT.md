@@ -38,7 +38,7 @@ Set these variables on the **backend Vercel project**, Preview only:
 | `PO_TOKEN_PROVIDER_URL` | Optional; defaults to Yozora's `https://poptox.onrender.com` provider |
 | `PO_TOKEN_API_KEY` | Optional provider API key, stored server-side only |
 
-The backend preview also needs the existing Supabase and database variables required by the main API. Do not move any backend secret to the frontend. Do not modify Production environment variables to test this branch.
+The backend preview also needs the existing Supabase and database variables required by the main API. Do not move any backend secret to the frontend. Do not modify Production environment variables to test this branch. The public Yozora default (`poptox.onrender.com`) returned HTTP 500 during the November 26, 2026 preview smoke test, so REX no longer silently defaults to it. Without an explicit provider URL, `/api/potoken` returns a controlled 503. Keep the provider and CORS proxy under the same trusted operator; official yt-dlp guidance notes that GVS tokens are session/content bound and that enforcement changes over time.
 
 ### CORS proxy hosting
 
