@@ -186,10 +186,13 @@ export function playQueue(tracks: Track[], index = 0) {
   set({ queue: q }); load(Math.min(index, q.length - 1));
 }
 export function playTrack(t: Track) {
+  // Ignore incomplete catalogue rows before starting playback or requesting
+  // related tracks. This prevents /api/watch/undefined and its Vercel 502.
+  if (!t || typeof t.videoId !== 'string' || !t.videoId.trim()) return;
   playQueue([t], 0);
   api.watch(t.videoId).then(w => {
     if (currentTrack()?.videoId !== t.videoId || state.queue.length !== 1) return;
-    const more = w.tracks.filter(x => x.videoId !== t.videoId);
+    const more = w.tracks.filter(x => typeof x.videoId === 'string' && x.videoId && x.videoId !== t.videoId);
     if (more.length) set({ queue: [t, ...more] });
   }).catch(() => undefined);
 }
