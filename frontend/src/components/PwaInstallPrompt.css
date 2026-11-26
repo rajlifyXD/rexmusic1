@@ -1,0 +1,84 @@
+.rx-pwa-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: 16px 14px max(16px, env(safe-area-inset-bottom));
+  background: rgba(3, 4, 7, .72);
+  -webkit-backdrop-filter: blur(15px) saturate(.85);
+  backdrop-filter: blur(15px) saturate(.85);
+}
+.rx-pwa-sheet {
+  position: relative;
+  box-sizing: border-box;
+  width: min(100%, 470px);
+  max-height: min(88svh, 760px);
+  overflow-y: auto;
+  padding: 25px 23px 20px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 28px;
+  color: #f6f6f8;
+  background: linear-gradient(155deg, #25262d 0%, #191a20 58%, #121318 100%);
+  box-shadow: 0 30px 100px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.09);
+}
+.rx-pwa-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 50%;
+  color: rgba(255,255,255,.78);
+  background: rgba(255,255,255,.055);
+  cursor: pointer;
+}
+.rx-pwa-brand { display:flex; align-items:center; gap:11px; margin-bottom:25px; }
+.rx-pwa-brand img { width:46px; height:46px; border-radius:13px; box-shadow:0 7px 20px rgba(0,0,0,.28); }
+.rx-pwa-brand span { display:flex; flex-direction:column; gap:4px; }
+.rx-pwa-brand b { font-size:17px; letter-spacing:.05em; }
+.rx-pwa-brand small { color:rgba(255,255,255,.42); font-size:8px; font-weight:800; letter-spacing:.16em; }
+.rx-pwa-intro { margin-bottom:21px; }
+.rx-pwa-eyebrow { color:#f0788e; font-size:9px; font-weight:800; letter-spacing:.18em; }
+.rx-pwa-intro h2 { margin:8px 0 8px; max-width:360px; color:#fff; font-size:27px; line-height:1.08; font-weight:750; letter-spacing:-.045em; }
+.rx-pwa-intro p { margin:0; max-width:390px; color:rgba(255,255,255,.61); font-size:13px; line-height:1.5; }
+.rx-pwa-steps { display:flex; flex-direction:column; gap:9px; margin:0 0 21px; }
+.rx-pwa-step { display:flex; align-items:center; gap:12px; min-height:57px; padding:9px 11px; border:1px solid rgba(255,255,255,.075); border-radius:15px; background:rgba(255,255,255,.035); }
+.rx-pwa-step-icon { display:grid; flex:none; place-items:center; width:36px; height:36px; border:1px solid rgba(237,49,83,.22); border-radius:11px; color:#ff8299; background:rgba(237,49,83,.09); }
+.rx-pwa-step span:last-child { display:flex; flex-direction:column; gap:4px; }
+.rx-pwa-step b { color:rgba(255,255,255,.92); font-size:12px; font-weight:700; }
+.rx-pwa-step small { color:rgba(255,255,255,.53); font-size:11px; line-height:1.4; }
+.rx-pwa-native-note { display:flex; align-items:center; gap:12px; margin:0 0 21px; padding:15px; border:1px solid rgba(237,49,83,.2); border-radius:16px; color:#ff8299; background:rgba(237,49,83,.07); }
+.rx-pwa-native-note span { display:flex; flex-direction:column; gap:4px; }
+.rx-pwa-native-note b { color:#fff; font-size:13px; }
+.rx-pwa-native-note small { color:rgba(255,255,255,.59); font-size:11px; }
+.rx-pwa-actions { display:flex; flex-direction:column; gap:8px; }
+.rx-pwa-primary,.rx-pwa-later {
+  display:flex; align-items:center; justify-content:center; gap:9px; width:100%; min-height:48px;
+  border-radius:14px; font-size:13px; font-weight:750; cursor:pointer; transition:transform .16s,filter .16s,background .16s;
+}
+.rx-pwa-primary { border:1px solid rgba(255,255,255,.16); color:#fff; background:linear-gradient(180deg,#e94b68,#c92e4c); box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 7px 18px rgba(190,37,66,.19); }
+.rx-pwa-primary:disabled { opacity:.65; cursor:wait; }
+.rx-pwa-later { border:1px solid rgba(255,255,255,.08); color:rgba(255,255,255,.68); background:rgba(255,255,255,.035); }
+.rx-pwa-primary:not(:disabled):active,.rx-pwa-later:active { transform:scale(.985); }
+.rx-pwa-footnote { margin:12px 0 0; color:rgba(255,255,255,.34); text-align:center; font-size:10px; }
+html.rex-standalone .rx-fullscreen-icon,
+html.rex-standalone .player-fullscreen,
+html.rex-standalone .mobile-fullscreen { display:none !important; }
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .rx-fullscreen-icon,.player-fullscreen,.mobile-fullscreen { display:none !important; }
+}
+@media (min-width: 720px) {
+  .rx-pwa-overlay { align-items:center; padding:24px; }
+}
+@media (max-width: 390px) {
+  .rx-pwa-sheet { padding:22px 17px 17px; border-radius:24px; }
+  .rx-pwa-intro h2 { font-size:24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rx-pwa-primary,.rx-pwa-later { transition:none; }
+}
