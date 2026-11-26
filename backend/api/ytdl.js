@@ -63,14 +63,42 @@ async function getInfo(id) {
   return info;
 }
 
+function formatDiagnostics(info) {
+  const streamingData = info?.streaming_data;
+  const formats = Array.isArray(streamingData?.adaptive_formats)
+    ? streamingData.adaptive_formats
+    : [];
+  const regularFormats = Array.isArray(streamingData?.formats)
+    ? streamingData.formats
+    : [];
+  const count = (predicate) => formats.filter(predicate).length;
+  const mimeTypes = [...new Set(formats
+    .map((format) => String(format.mime_type || "").split(";")[0])
+    .filter((value) => /^[\w.+-]+\/[\w.+-]+$/.test(value)))].slice(0, 8);
+
+  return {
+    streamingDataPresent: Boolean(streamingData),
+    adaptiveFormatCount: formats.length,
+    regularFormatCount: regularFormats.length,
+    formatsWithAudioFlag: count((format) => format.has_audio === true),
+    formatsWithVideoFlag: count((format) => format.has_video === true),
+    formatsMarkedAudioOnly: count((format) => format.has_audio === true && format.has_video === false),
+    formatsMarkedOtf: count((format) => format.is_type_otf === true),
+    formatsMarkedDrm: count((format) => Array.isArray(format.drm_families) && format.drm_families.length > 0),
+    mimeTypes,
+  };
+}
+
 function selectAudioFormat(info, profile) {
-  const formats = (info.streaming_data?.adaptive_formats || []).filter((format) =>
+  const allFormats = info.streaming_data?.adaptive_formats || [];
+  const formats = allFormats.filter((format) =>
     format.has_audio && !format.has_video && !format.is_type_otf &&
     !(format.drm_families?.length)
   );
   if (!formats.length) {
     const error = new Error("YouTube returned no compatible audio-only formats.");
     error.statusCode = 502;
+    error.diagnostics = formatDiagnostics(info);
     throw error;
   }
 
@@ -159,6 +187,7 @@ export default {
         code: error?.code || "YOUTUBEI_REQUEST_FAILED",
         name: String(error?.name || "Error").slice(0, 100),
         message: safeMessage(error),
+        ...(error?.diagnostics ? { formatDiagnostics: error.diagnostics } : {}),
       };
       console.error("[REX YOUTUBEI] stream preparation failed", JSON.stringify(diagnostic));
       return json(request, Number(error?.statusCode) || 502, diagnostic);
