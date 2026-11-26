@@ -129,10 +129,27 @@ export default {
       request.signal.addEventListener("abort", () => stream.destroy(), { once: true });
       return new Response(body, { status, headers });
     } catch (error) {
-      return json(request, Number(error?.statusCode) || 502, {
-        error: error?.code || "YTDL_REQUEST_FAILED",
+      // Preserve the solver's attempt ladder so Vercel logs expose the failing
+      // player/client step rather than only PLAYER_SOLVE_FAILED.
+      const attempts = Array.isArray(error?.attempts)
+        ? error.attempts.map((attempt) => ({
+            client: String(attempt?.client || ""),
+            step: String(attempt?.step || ""),
+            code: String(attempt?.code || ""),
+            reason: String(attempt?.reason || "").slice(0, 1200),
+            cause: String(attempt?.cause?.message || attempt?.cause || "").slice(0, 1200),
+          }))
+        : [];
+
+      const diagnostic = {
+        code: error?.code || "YTDL_REQUEST_FAILED",
         message: error?.message || "ytdl-core request failed",
-      });
+        attempts,
+        cause: String(error?.cause?.message || error?.cause || "").slice(0, 1600),
+      };
+      console.error("[REX YTDL] stream preparation failed", JSON.stringify(diagnostic));
+
+      return json(request, Number(error?.statusCode) || 502, diagnostic);
     }
   },
 };
