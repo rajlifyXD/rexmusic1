@@ -46,7 +46,7 @@ The source bundle intentionally excludes `.env`, SQLite databases, build output,
 
 The default local audio path is `HTMLAudioElement → /api/stream/{video_id} → FastAPI → Node @distube/ytdl-core v5 sidecar`. In the Vercel deployment, the same browser URL is rewritten to the Node.js Vercel Function at `backend/api/ytdl.js`; FastAPI remains the API for the other routes.
 
-This branch also contains an **opt-in client-side yt-dlp-wasm experiment**. It resolves an audio-only signed media URL in a Pyodide worker, then hands that URL to the same REX `HTMLAudioElement`, avoiding a full-track Blob download. It uses a Yozora-inspired PO-token bridge at `/api/potoken`. The experiment is disabled unless `VITE_REX_STREAM_ENGINE=wasm` is configured and a trusted yt-dlp-wasm CORS proxy is supplied. See [docs/WASM-STREAMING-EXPERIMENT.md](docs/WASM-STREAMING-EXPERIMENT.md) before enabling it.
+This branch also contains an **opt-in client-side yt-dlp-wasm experiment**. It bundles the package's worker as a same-origin asset, resolves an audio-only signed media URL in Pyodide, then hands that URL to the same REX `HTMLAudioElement`, avoiding a full-track Blob download. Separate GVS/player PO tokens are supplied by a Yozora-inspired bridge at `/api/potoken`. The experiment is disabled unless `VITE_REX_STREAM_ENGINE=wasm` is configured and a trusted yt-dlp-wasm CORS proxy is supplied. Review the package's AGPL licensing and see [docs/WASM-STREAMING-EXPERIMENT.md](docs/WASM-STREAMING-EXPERIMENT.md) before enabling it.
 
 Neither extractor can guarantee continuous access to YouTube: upstream formats, PO-token requirements, IP reputation and signed media URLs can change. Do not treat the quality selector as a lossless-audio guarantee.
 
