@@ -1,0 +1,295 @@
+/**
+ * Experimental client-side YouTube resolver for REX.
+ *
+ * yt-dlp runs in its own module worker through Pyodide/WASM. We only ask it
+ * for media metadata and then hand the signed Google Video URL to REX's
+ * existing HTMLAudioElement. The audio bytes are NOT downloaded into memory.
+ *
+ * Requires a trusted, user-operated yt-dlp-wasm CORS proxy. Never pass account
+ * cookies or Supabase credentials to this engine or its proxy.
+ */
+import { apiUrl } from '../api';
+import { createYtDlp } from '@project516/yt-dlp-wasm';
+
+type Quality = 'data-saver' | 'balanced' | 'high';
+
+type YtdlpFormat = {
+  url?: string;
+  format_id?: string;
+  ext?: string;
+  protocol?: string;
+  acodec?: string;
+  vcodec?: string;
+  abr?: number | string;
+  tbr?: number | string;
+  filesize?: number;
+  filesize_approx?: number;
+  has_drm?: boolean;
+  is_drm?: boolean;
+};
+
+type YtdlpInfo = {
+  id?: string;
+  title?: string;
+  duration?: number;
+  formats?: YtdlpFormat[];
+};
+
+type YtdlpInstance = {
+  extractInfo(url: string, options?: Record<string, unknown>): Promise<YtdlpInfo>;
+  close(): Promise<void>;
+  terminate(): void;
+};
+
+
+
+export type WasmAudioStream = {
+  url: string;
+  formatId: string;
+  bitrate: number;
+  mimeType: string;
+  duration: number;
+  expiresAt: number;
+};
+
+type TokenReply = {
+  po_token?: string;
+  visitor_data?: string;
+};
+
+const env = import.meta.env as Record<string, string | undefined>;
+const streamEngine = (env.VITE_REX_STREAM_ENGINE || '').trim().toLowerCase();
+const corsProxy = (env.VITE_YTDLP_WASM_CORS_PROXY || '').trim();
+const corsProxyKey = (env.VITE_YTDLP_WASM_CORS_PROXY_KEY || '').trim();
+
+let enginePromise: Promise<YtdlpInstance> | null = null;
+const streamCache = new Map<string, WasmAudioStream>();
+
+export function isWasmStreamEngineSelected(): boolean {
+  return streamEngine === 'wasm';
+}
+
+function hasJspi(): boolean {
+  const wasm = WebAssembly as unknown as {
+    Suspending?: unknown;
+    promising?: unknown;
+  };
+  return typeof wasm.Suspending === 'function' && typeof wasm.promising === 'function';
+}
+
+function safeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '[upstream URL redacted]')
+    .replace(/(cookie|authorization|token|signature|sig)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .slice(0, 600);
+}
+
+async function getPoToken(videoId: string, client: 'mweb' | 'web', context: 'gvs' | 'player'): Promise<TokenReply | null> {
+  const url = apiUrl(
+    `/api/potoken?video_id=${encodeURIComponent(videoId)}&client=${client}&context=${context}`,
+  );
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as TokenReply;
+    return typeof data.po_token === 'string' && data.po_token
+      ? data
+      : null;
+  } catch {
+    // Token providers are optional. Extraction still gets one unauthenticated
+    // attempt, and the final extractor error is shown to the user.
+    return null;
+  }
+}
+
+async function getEngine(): Promise<YtdlpInstance> {
+  if (!corsProxy) {
+    throw new Error(
+      'Client-side streaming is not configured yet. Set VITE_YTDLP_WASM_CORS_PROXY to your private yt-dlp-wasm proxy URL.',
+    );
+  }
+  if (!hasJspi()) {
+    throw new Error(
+      'This browser does not expose WebAssembly JSPI. Update to a current Chrome, Firefox or Safari build to use the experimental engine.',
+    );
+  }
+  if (!enginePromise) {
+    enginePromise = (async () => {
+      // A package import lets Vite rewrite the module worker to a same-origin
+      // asset. A raw CDN import would create a cross-origin Worker, which browsers block.
+      return await createYtDlp({
+        corsProxy,
+        // Vite does not copy node_modules package dist/ files automatically.
+        // Load the wheel from the pinned upstream package release.
+        wheelURL: 'https://cdn.jsdelivr.net/npm/@project516/yt-dlp-wasm@0.6.0/dist/yt_dlp-2026.10.26-py3-none-any.whl',
+        ...(corsProxyKey ? { corsProxyKey } : {}),
+        onLog: () => {
+          // Do not forward yt-dlp logs to the console: diagnostics may contain
+          // signed media URLs and short-lived PO tokens.
+        },
+      }) as unknown as YtdlpInstance;
+    })().catch((error) => {
+      enginePromise = null;
+      throw error;
+    });
+  }
+  return enginePromise;
+}
+
+function bitrate(format: YtdlpFormat): number {
+  const value = Number(format.abr ?? format.tbr ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function isProgressiveAudio(format: YtdlpFormat): boolean {
+  if (!format.url || !format.acodec || format.acodec === 'none') return false;
+  if (format.vcodec && format.vcodec !== 'none') return false;
+  if (format.has_drm || format.is_drm) return false;
+
+  const protocol = (format.protocol || '').toLowerCase();
+  if (protocol && protocol !== 'http' && protocol !== 'https') return false;
+
+  try {
+    const url = new URL(format.url);
+    return url.protocol === 'https:' &&
+      (url.hostname === 'googlevideo.com' || url.hostname.endsWith('.googlevideo.com'));
+  } catch {
+    return false;
+  }
+}
+
+function chooseFormat(formats: YtdlpFormat[], quality: Quality): YtdlpFormat | null {
+  const usable = formats
+    .filter(isProgressiveAudio)
+    .sort((a, b) => bitrate(a) - bitrate(b));
+
+  if (!usable.length) return null;
+  if (quality === 'high') return usable[usable.length - 1];
+
+  const ceiling = quality === 'data-saver' ? 96 : 160;
+  const underCeiling = usable.filter((format) => bitrate(format) > 0 && bitrate(format) <= ceiling);
+  return underCeiling[underCeiling.length - 1] ?? usable[0];
+}
+
+function mimeType(ext?: string): string {
+  switch ((ext || '').toLowerCase()) {
+    case 'm4a': return 'audio/mp4';
+    case 'mp3': return 'audio/mpeg';
+    case 'opus': return 'audio/ogg; codecs=opus';
+    case 'ogg': return 'audio/ogg';
+    case 'wav': return 'audio/wav';
+    default: return 'audio/webm';
+  }
+}
+
+function signedUrlExpiry(value: string): number {
+  try {
+    const url = new URL(value);
+    const expirySeconds = Number(url.searchParams.get('expire'));
+    if (Number.isFinite(expirySeconds) && expirySeconds > 0) return expirySeconds * 1000;
+  } catch {
+    // The format URL is validated separately.
+  }
+  return Date.now() + 90_000;
+}
+
+/**
+ * Resolves a progressive, signed audio-only URL. Playback remains in REX's
+ * existing audio element; only metadata extraction is performed by WASM.
+ */
+export async function resolveWasmAudioStream(
+  videoId: string,
+  quality: Quality = 'balanced',
+): Promise<WasmAudioStream> {
+  const cacheKey = `${videoId}:${quality}`;
+  const cached = streamCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 15_000) return cached;
+
+  const engine = await getEngine();
+  const videoUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+  const getTokenPair = async (client: 'mweb' | 'web') => {
+    const [gvs, player] = await Promise.all([
+      getPoToken(videoId, client, 'gvs'),
+      getPoToken(videoId, client, 'player'),
+    ]);
+    return { gvs, player };
+  };
+  const mwebTokens = await getTokenPair('mweb');
+
+  let info: YtdlpInfo | null = null;
+  let lastError: unknown;
+  const attempts: Array<{ client: 'mweb' | 'web'; tokens: Awaited<ReturnType<typeof getTokenPair>> }> = [
+    { client: 'mweb', tokens: mwebTokens },
+  ];
+
+  for (let index = 0; index < attempts.length; index += 1) {
+    const attempt = attempts[index];
+    const youtube: Record<string, unknown> = { player_client: [attempt.client] };
+    const poTokens: string[] = [];
+    if (attempt.tokens.gvs?.po_token) poTokens.push(`${attempt.client}.gvs+${attempt.tokens.gvs.po_token}`);
+    if (attempt.tokens.player?.po_token) poTokens.push(`${attempt.client}.player+${attempt.tokens.player.po_token}`);
+    if (poTokens.length) youtube.po_token = poTokens;
+    const visitorData = attempt.tokens.gvs?.visitor_data || attempt.tokens.player?.visitor_data;
+    if (visitorData) youtube.visitor_data = [visitorData];
+    try {
+      info = await engine.extractInfo(videoUrl, {
+        noplaylist: true,
+        quiet: true,
+        no_warnings: true,
+        extractor_args: { youtube },
+      });
+      if (info.formats?.some(isProgressiveAudio)) break;
+      lastError = new Error('No progressive audio-only formats were returned.');
+    } catch (error) {
+      lastError = error;
+    }
+
+    // The recommended mweb client is attempted first. If it returns no direct
+    // audio URL, retry with Yozora's web-client GVS and player token contexts.
+    if (index === 0) attempts.push({ client: 'web', tokens: await getTokenPair('web') });
+  }
+
+  if (!info) {
+    throw new Error(`yt-dlp-wasm could not resolve this track: ${safeError(lastError || 'no extractor response')}`);
+  }
+
+  const selected = chooseFormat(info.formats || [], quality);
+  if (!selected?.url) {
+    throw new Error(
+      'YouTube returned no direct progressive audio-only format for this track. The current browser proxy or YouTube access response may not be compatible.',
+    );
+  }
+
+  const expiresAt = Math.min(signedUrlExpiry(selected.url), Date.now() + 120_000);
+  const result: WasmAudioStream = {
+    url: selected.url,
+    formatId: selected.format_id || 'unknown',
+    bitrate: bitrate(selected),
+    mimeType: mimeType(selected.ext),
+    duration: Number(info.duration) || 0,
+    expiresAt,
+  };
+
+  if (expiresAt > Date.now() + 15_000) {
+    if (streamCache.size > 40) streamCache.clear();
+    streamCache.set(cacheKey, result);
+  }
+  return result;
+}
+
+/** Clears cached signed URLs after a stream error or when the app changes engine. */
+export function clearWasmStreamCache(videoId?: string): void {
+  if (!videoId) {
+    streamCache.clear();
+    return;
+  }
+  for (const key of streamCache.keys()) {
+    if (key.startsWith(`${videoId}:`)) streamCache.delete(key);
+  }
+}

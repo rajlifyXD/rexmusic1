@@ -31,8 +31,10 @@ Add these **backend-only** Environment Variables for Preview and Production:
 | `SUPABASE_SERVICE_ROLE_KEY` | Your `sb_secret_...` key (or legacy service-role key) |
 | `REX_CORS_ORIGINS` | Exact frontend origin, e.g. `https://rex-web.vercel.app` |
 | `LIQUID_DB` | `/tmp/rex/liquid.db` (ephemeral health-check database only) |
+| `PO_TOKEN_PROVIDER_URL` | Optional; defaults to the Yozora-style provider `https://poptox.onrender.com` |
+| `PO_TOKEN_API_KEY` | Optional API key for that PO-token provider |
 
-Do **not** add the Supabase secret/service-role key to the frontend project. The backend's FastAPI app reads the Vercel environment variables directly. On Vercel, the local SQLite path is `/tmp`; the per-user libraries remain in Supabase and are not stored in this temporary database.
+Do **not** add the Supabase secret/service-role key to the frontend project. The backend's FastAPI app reads the Vercel environment variables directly. On Vercel, the local SQLite path is `/tmp`; the per-user libraries remain in Supabase and are not stored in this temporary database. The `PO_TOKEN_API_KEY`, when needed, must remain backend-only.
 
 Deploy the backend and copy its HTTPS domain, for example `https://rex-api.vercel.app`.
 
@@ -62,6 +64,8 @@ Redeploy after adding variables. Then copy the frontend's production origin and 
 ## 3. Streaming notes for the Vercel test
 
 The audio stream is a Node.js Vercel Function and uses HTTP byte-range requests for seeking. The backend project's `vercel.json` sets the stream function to 300 seconds, which fits the Vercel Hobby function duration ceiling. On Hobby, a song/stream lasting longer than the function duration can be cut off. Vercel documents longer maximum durations on eligible Pro/Enterprise Fluid Compute plans; increase `maxDuration` in `backend/vercel.json` only when the account plan permits it.
+
+The experimental WASM resolver adds `backend/api/potoken.js` as a separate Node Function. It fetches short-lived Proof-of-Origin token material from the configured provider for the client-side yt-dlp-wasm extractor; it does not stream audio and does not receive account cookies. For its Preview CORS response, the backend's `REX_CORS_ORIGINS` must include the exact frontend preview origin.
 
 This makes Vercel suitable for a **test host**, but not a guarantee of uninterrupted long-form music streaming on the free/Hobby plan. YouTube may also rate-limit or change the upstream formats independently of Vercel. Check `/api/health` on the backend domain; it reports the serverless stream function as ready when running on Vercel.
 

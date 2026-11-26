@@ -411,7 +411,11 @@ function SettingsPage({ username, avatar, onProfile, onToast, navigate, onToggle
       <div className="rx-setting-entry rx-setting-lyrics last"><span className="rx-setting-icon"><Headphones size={24} strokeWidth={1.65}/></span><span className="rx-setting-copy"><b>Lyrics</b><small>Synced lyrics and karaoke display</small></span><span className="rx-setting-status">Ready</span></div>
       <div className="rx-settings-expanded rx-lyrics-expanded"><div className="rx-lyrics-caption">LYRICS DISPLAY</div><LyricsSlider value={lyricsSize} onChange={setLyricsValue} onReset={() => { setLyricsValue(lyricSliderFromFont(defaultLyricsFontSize())); onToast('Lyrics text size restored to the original default.'); }}/></div>
     </div></section>
-    <section className="rx-settings-group"><h2>More</h2><div className="rx-settings-panel"><SettingRow icon={Maximize2} title="Fullscreen" subtitle={isStandalone ? 'Home Screen app mode' : isFullscreen ? 'Fullscreen is active' : 'Use the full available display'} onClick={onToggleFullscreen}/><SettingRow icon={Info} title="About REX" subtitle="Version 1.0.0" onClick={() => navigate('/about')} last/></div></section>
+    <section className="rx-settings-group"><h2>More</h2><div className="rx-settings-panel">
+      {!isStandalone && <SettingRow icon={Download} title="Install REX" subtitle="Add REX to your Home Screen" onClick={() => window.dispatchEvent(new Event('rex:show-pwa-install'))}/>}
+      {!isStandalone && <SettingRow icon={Maximize2} title="Fullscreen" subtitle={isFullscreen ? 'Fullscreen is active' : 'Use the full available display'} onClick={onToggleFullscreen}/>}
+      <SettingRow icon={Info} title="About REX" subtitle="Version 1.0.0" onClick={() => navigate('/about')} last/>
+    </div></section>
     <section className="rx-settings-group"><h2>Support REX</h2><div className="rx-settings-panel">
       <SettingRow icon={HeartHandshake} title="Donate to REX" subtitle="Help keep the music playing" onClick={() => setDonationOpen(open => !open)} trailing={<span className="rx-setting-status">{donationOpen ? 'Hide details' : 'View details'}</span>} last={!donationOpen}/>
       {donationOpen && <div className="rx-donation-panel">
