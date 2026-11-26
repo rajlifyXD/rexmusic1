@@ -5,7 +5,7 @@ on:
     branches:
       - feat/rex-pwa-icon-refresh
     paths:
-      - .github/pwa-icon-source.jpg.b64
+      - .github/pwa-icon-source.ready
 
 permissions:
   contents: write
