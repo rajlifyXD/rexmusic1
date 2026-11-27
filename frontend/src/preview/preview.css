@@ -2126,3 +2126,67 @@ body { overscroll-behavior:none; }
     flex-basis: 34px !important;
   }
 }
+
+
+/* REX startup loader — intentionally global because the auth-ready splash renders before #rex-root exists. */
+#app > .rex-splash-screen,
+#app .rx-splash-screen {
+  position:fixed; inset:0; z-index:99999; display:grid; place-items:center;
+  overflow:hidden; isolation:isolate; padding:env(safe-area-inset-top,0px) 24px env(safe-area-inset-bottom,0px);
+  background:
+    radial-gradient(ellipse 72% 54% at 50% 112%,rgba(224,35,75,.23),transparent 72%),
+    radial-gradient(ellipse 46% 42% at 100% 24%,rgba(104,26,51,.16),transparent 70%),
+    #08090c;
+}
+#app > .rex-splash-screen::before,
+#app .rx-splash-screen::before {
+  content:""; position:absolute; inset:-30%; z-index:-1; pointer-events:none;
+  background:conic-gradient(from 205deg at 50% 50%,transparent 0deg,rgba(239,48,83,.10) 70deg,transparent 145deg,rgba(255,255,255,.025) 210deg,transparent 300deg);
+  filter:blur(46px); animation:rex-loader-drift 8s linear infinite;
+}
+#app .rx-loading-page {
+  position:relative; display:flex; width:min(100%,420px); min-height:100svh;
+  flex-direction:column; align-items:center; justify-content:center; gap:0;
+  text-align:center; overflow:hidden;
+}
+#app .rx-loader-aura {
+  position:absolute; width:min(72vw,310px); aspect-ratio:1; border-radius:50%;
+  background:radial-gradient(circle,rgba(224,35,75,.18) 0%,rgba(224,35,75,.055) 38%,transparent 70%);
+  filter:blur(12px); animation:rex-loader-breathe 3.4s ease-in-out infinite;
+}
+#app .rx-loading-logo {
+  position:relative; z-index:1; color:#f8f5f6; font-size:clamp(82px,22vw,112px);
+  line-height:.9; font-weight:650; letter-spacing:-.105em; padding-right:.1em;
+  text-shadow:0 8px 44px rgba(232,44,79,.12);
+  animation:rex-loader-logo 3s ease-in-out infinite;
+}
+#app .rx-loading-logo span { color:#f04465; }
+#app .rx-loader-track {
+  position:relative; width:116px; height:2px; margin-top:42px; overflow:hidden;
+  border-radius:99px; background:rgba(255,255,255,.10);
+}
+#app .rx-loader-track i {
+  position:absolute; inset:0 auto 0 -42%; width:42%; border-radius:inherit;
+  background:linear-gradient(90deg,transparent,#f04465 45%,#ffd2db);
+  box-shadow:0 0 14px rgba(240,68,101,.85); animation:rex-loader-sweep 1.35s cubic-bezier(.65,0,.35,1) infinite;
+}
+#app .rx-loading-bars { display:flex; height:30px; align-items:center; justify-content:center; gap:5px; margin-top:24px; }
+#app .rx-loading-bars i {
+  display:block; width:3px; height:7px; border-radius:9px;
+  background:linear-gradient(180deg,#ffb4c1,#e83b5e);
+  box-shadow:0 0 10px rgba(232,59,94,.24);
+  animation:rex-loader-wave .82s ease-in-out infinite alternate;
+}
+#app .rx-loading-page > p {
+  position:relative; margin:15px 0 0; color:rgba(255,245,247,.48);
+  font-size:9px; font-weight:650; letter-spacing:.28em;
+}
+@keyframes rex-loader-sweep { 0%{transform:translateX(0)} 100%{transform:translateX(340%)} }
+@keyframes rex-loader-wave { from{height:6px;opacity:.5} to{height:27px;opacity:1} }
+@keyframes rex-loader-breathe { 0%,100%{transform:scale(.88);opacity:.65} 50%{transform:scale(1.12);opacity:1} }
+@keyframes rex-loader-logo { 0%,100%{text-shadow:0 8px 32px rgba(232,44,79,.10)} 50%{text-shadow:0 8px 52px rgba(232,44,79,.24)} }
+@keyframes rex-loader-drift { to{transform:rotate(360deg)} }
+@media(prefers-reduced-motion:reduce) {
+  #app .rx-loader-aura,#app .rx-loading-logo,#app .rx-loader-track i,#app .rx-loading-bars i,
+  #app > .rex-splash-screen::before,#app .rx-splash-screen::before { animation:none!important; }
+}
