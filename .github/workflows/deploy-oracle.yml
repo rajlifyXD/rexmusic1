@@ -1,0 +1,146 @@
+name: Oracle backend CI and deploy
+
+on:
+  push:
+    branches:
+      - migration/oracle-backend
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-oracle.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rex-oracle-backend-migration
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate backend runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.2"
+          cache: npm
+          cache-dependency-path: backend/ytdl-service/package-lock.json
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install Node dependencies
+        run: npm ci --prefix backend/ytdl-service --omit=dev
+
+      - name: Validate Python syntax
+        run: python -m compileall -q backend
+
+      - name: Validate Node sidecar syntax
+        run: npm run check --prefix backend/ytdl-service
+
+  deploy:
+    name: Deploy to Oracle VM
+    needs: validate
+    if: vars.OCI_DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/migration/oracle-backend' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        env:
+          OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+          OCI_KNOWN_HOSTS: ${{ secrets.OCI_KNOWN_HOSTS }}
+        run: |
+          test -n "$OCI_SSH_KEY" || { echo "Missing OCI_SSH_KEY"; exit 1; }
+          test -n "$OCI_KNOWN_HOSTS" || { echo "Missing OCI_KNOWN_HOSTS"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$OCI_SSH_KEY" > ~/.ssh/rex_oci
+          chmod 600 ~/.ssh/rex_oci
+          printf '%s\n' "$OCI_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Package source (exclude secrets and local state)
+        run: |
+          tar -czf /tmp/rex-backend.tar.gz \
+            --exclude=.git \
+            --exclude='**/node_modules' \
+            --exclude='**/__pycache__' \
+            --exclude='**/.venv' \
+            --exclude='frontend/dist' \
+            --exclude='data' \
+            --exclude='.env' \
+            .
+
+      - name: Upload release archive
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+        run: |
+          test -n "$OCI_HOST" && test -n "$OCI_USER"
+          scp -i ~/.ssh/rex_oci -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            /tmp/rex-backend.tar.gz "$OCI_USER@$OCI_HOST:/tmp/rex-backend-${GITHUB_SHA}.tar.gz"
+
+      - name: Install release, restart, health-check and rollback on failure
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+        run: |
+          ssh -i ~/.ssh/rex_oci -o BatchMode=yes -o StrictHostKeyChecking=yes "$OCI_USER@$OCI_HOST" \
+            "bash -s -- '$GITHUB_SHA'" <<'REMOTE'
+          set -Eeuo pipefail
+          SHA="$1"
+          ROOT=/opt/rex
+          RELEASE="$ROOT/releases/$SHA"
+          PREVIOUS="$(readlink -f "$ROOT/current" 2>/dev/null || true)"
+          sudo mkdir -p "$RELEASE" "$ROOT/shared/data"
+          sudo tar -xzf "/tmp/rex-backend-$SHA.tar.gz" -C "$RELEASE"
+          sudo chown -R rex:rex "$RELEASE"
+          sudo -u rex python3 -m venv "$ROOT/venv"
+          sudo -u rex "$ROOT/venv/bin/pip" install --disable-pip-version-check -r "$RELEASE/backend/requirements.txt"
+          sudo -u rex npm ci --omit=dev --prefix "$RELEASE/backend/ytdl-service"
+          sudo ln -sfn "$ROOT/shared/.env" "$RELEASE/.env"
+          sudo ln -sfn "$ROOT/shared/data" "$RELEASE/data"
+          sudo ln -sfn "$RELEASE" "$ROOT/current"
+          sudo install -m 644 "$ROOT/current/backend/oci/rex-api.service" /etc/systemd/system/rex-api.service
+          sudo systemctl daemon-reload
+          sudo systemctl enable rex-api
+          sudo systemctl restart rex-api
+          HEALTHY=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/api/health >/tmp/rex-health.json; then
+              if grep -q '"ok":true' /tmp/rex-health.json && grep -q '"streaming":"ready"' /tmp/rex-health.json; then
+                HEALTHY=1
+                break
+              fi
+            fi
+            sleep 2
+          done
+          if [ "$HEALTHY" -ne 1 ]; then
+            echo "New release failed health check; rolling back."
+            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
+              sudo ln -sfn "$PREVIOUS" "$ROOT/current"
+              sudo systemctl restart rex-api || true
+            fi
+            sudo journalctl -u rex-api -n 100 --no-pager || true
+            exit 1
+          fi
+          sudo rm -f "/tmp/rex-backend-$SHA.tar.gz"
+          echo "Deployed $SHA successfully."
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f ~/.ssh/rex_oci ~/.ssh/known_hosts /tmp/rex-backend.tar.gz
