@@ -1,0 +1,27 @@
+[Unit]
+Description=REX FastAPI backend and ytdl-core streaming sidecar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rex
+Group=rex
+WorkingDirectory=/opt/rex/current/backend
+EnvironmentFile=-/opt/rex/shared/.env
+Environment=LIQUID_DB=/opt/rex/shared/data/liquid.db
+Environment=REX_YTDL_PORT=4181
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/rex/venv/bin/uvicorn main:app --host 127.0.0.1 --port 4173 --proxy-headers
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/rex/shared
+
+[Install]
+WantedBy=multi-user.target
