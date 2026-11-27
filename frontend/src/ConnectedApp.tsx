@@ -552,7 +552,22 @@ function AboutPage({ navigate }: { navigate: (path: string) => void }) {
 }
 
 function LoadingPage() {
-  return <div className="rx-loading-page" aria-label="Loading REX"><motion.div className="rx-loading-logo" initial={{ opacity: 0, y: 12, filter: 'blur(8px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: .65, ease: [0.22, 1, .36, 1] }}>REX<span>.</span></motion.div><div className="rx-loading-bars">{Array.from({ length: 5 }, (_, index) => <i key={index} style={{ animationDelay: `${index * 90}ms` }}/>)}</div><p>MADE FOR THE MUSIC</p></div>;
+  return (
+    <div className="rx-loading-page" role="status" aria-label="Loading REX">
+      <div className="rx-loader-aura" aria-hidden="true"/>
+      <motion.div
+        className="rx-loading-logo"
+        initial={{ opacity: 0, y: 18, scale: .94, filter: 'blur(12px)' }}
+        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+        transition={{ duration: .85, ease: [0.22, 1, .36, 1] }}
+      >rex<span>.</span></motion.div>
+      <div className="rx-loader-track" aria-hidden="true"><i/></div>
+      <div className="rx-loading-bars" aria-hidden="true">
+        {Array.from({ length: 7 }, (_, index) => <i key={index} style={{ animationDelay: `${index * 85}ms` }}/>)}
+      </div>
+      <p>YOUR MUSIC. YOUR MOMENT.</p>
+    </div>
+  );
 }
 function NotFoundPage({ navigate }: { navigate: (path: string) => void }) {
   return <div className="rx-notfound-page"><div>404</div><h1>Lost the track?</h1><p>This page doesn't exist. Let's get you back to the music.</p><BubbleAction onClick={() => navigate('/')}>Back to REX <Home size={16}/></BubbleAction></div>;
